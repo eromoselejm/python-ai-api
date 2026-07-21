@@ -1,0 +1,6 @@
+# Ignore a specific file (like your secret API keys)
+venv/
+__pycache__/
+vector_db/
+.env
+*.pyc
