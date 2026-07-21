@@ -14,11 +14,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+api_key = os.getenv("GEMINI_API_KEY")
+
+print("API KEY FOUND:", api_key is not None)
+print("API KEY LENGTH:", len(api_key) if api_key else 0)
+
+client = genai.Client(api_key=api_key)
+
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 app = FastAPI()
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+
+
 
 @app.get("/")
 async def home():
