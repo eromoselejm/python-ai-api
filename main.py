@@ -86,55 +86,66 @@ class SearchRequest(BaseModel):
 @app.post("/search_query")
 async def search_query(request: SearchRequest):
 
+    context = ""
     query = request.query
-
-    #Load FAISS index
-    index = faiss.read_index("vector_db/faiss.index")
-
-    #Load metadata
-    with open("vector_db/metadata.pkl", "rb") as f:
-        metadata = pickle.load(f)
-
-    query_embedding = model.encode(
-        [query],
-        convert_to_numpy=True,
-        normalize_embeddings=True
-    )
-
     results = []
 
-    #Search Top 5 nearest chunks
-    distances, indices = index.search(query_embedding, 5)
+    #Check if document has been uploaded
+    if os.path.exists("vector_db/faiss.index") and os.path.exists("vector_db/metadata.pkl"):
+    #Load FAISS index
+        index = faiss.read_index("vector_db/faiss.index")
 
-    DISTANCE_THRESHOLD = 0.8
+        #Load metadata
+        with open("vector_db/metadata.pkl", "rb") as f:
+            metadata = pickle.load(f)
 
-    #Iterating through distances and indices using zip() to pair them together
-    for distance, idx in zip(distances[0], indices[0]):
-        if idx == -1:
-            continue
-        if distance <= DISTANCE_THRESHOLD:
-            results.append({
-                "similarity_distance": round(distance, 3),
-                "page": metadata[idx]["filename"],
-                "text": metadata[idx]["text"]
-            })
+        query_embedding = model.encode(
+            [query],
+            convert_to_numpy=True,
+            normalize_embeddings=True
+        )
+
+        #Search Top 5 nearest chunks
+        distances, indices = index.search(query_embedding, 5)
+
+        DISTANCE_THRESHOLD = 0.8
+
+        #Iterating through distances and indices using zip() to pair them together
+        for distance, idx in zip(distances[0], indices[0]):
+            if idx == -1:
+                continue
+            if distance <= DISTANCE_THRESHOLD:
+                results.append(metadata[idx]["text"])
     
-    context = "\n\n".join(result["text"] for result in results)
+    
+    context = "\n\n".join(results)
 
-    prompt = f"""
-    You are a helpful AI assistant. 
-    Answer the users question using primarily the information in the 
-    context below.
+    if context:
+        prompt = f"""
+        You are a helpful AI assistant.
 
-    If the answer is not in the context, answer using your general knowledge and give a result of
-    as most 500 characters and respond like this:
-    "I couldn't find the information in the uploaded document,
-    yet here is what i could find (your answer)"
+        Answer the user's question using the context below.
 
-    Context: {context}
+        If the answer isn't in the context,
+        say so, then answer using your own knowledge.
 
-    Question: {query}
-    """
+        Context:
+        {context}
+
+        Question:
+        {query}
+        """
+    else:
+        prompt = f"""
+        You are a helpful AI assistant.
+
+        No uploaded document is available.
+
+        Answer the user's question using your general knowledge.
+
+        Question:
+        {query}
+        """
     try:
         response = client.models.generate_content(
             model="gemini-2.5-flash",
@@ -148,7 +159,7 @@ async def search_query(request: SearchRequest):
     except Exception as e:
         return {
             "response": "Sorry something went wrong.",
-            "error": e
+            "error": str(e)
         }
 
 
